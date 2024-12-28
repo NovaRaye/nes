@@ -91,6 +91,9 @@ impl CPU {
                 0xA9 | 0xA5 | 0xB5 | 0xAD | 0xBD | 0xB9 | 0xA1 | 0xB1 => {
                     self.lda(&opcode.mode);
                 }
+                0x85 | 0x95 | 0x8D | 0x9D | 0x99 | 0x81 | 0x91 => {
+                    self.sta(&opcode.mode);
+                }
                 0xAA => self.tax(),
                 0xE8 => self.inx(),
                 0x00 => break,
@@ -106,6 +109,11 @@ impl CPU {
     fn inx(&mut self) {
         self.register_x = self.register_x.wrapping_add(1);
         self.update_zero_and_negative_flags(self.register_x);
+    }
+
+    fn sta(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        self.mem_write(addr, self.register_a);
     }
 
     fn lda(&mut self, mode: &AddressingMode) {
@@ -214,5 +222,12 @@ mod test {
         cpu.load_and_run(vec![0xA5, 0x10, 0x00]);
 
         assert_eq!(cpu.register_a, 0x55);
+    }
+
+    #[test]
+    fn test_sta() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xA9, 0x55, 0x85, 0x10, 0x00]);
+        assert_eq!(cpu.mem_read(0x10), 0x55);
     }
 }
