@@ -97,57 +97,6 @@ impl CPU {
         self.run()
     }
 
-    pub fn run(&mut self) {
-        let ref opcodes: HashMap<u8, &'static opcodes::OpCode> = *opcodes::OPCODES_MAP;
-
-        loop {
-            let code = self.mem_read(self.program_counter);
-            let opcode = opcodes
-                .get(&code)
-                .expect(&format!("OpCode {:x} is not recognized", code));
-            self.program_counter += 1;
-            let program_counter_state = self.program_counter;
-            match code {
-                0xA9 | 0xA5 | 0xB5 | 0xAD | 0xBD | 0xB9 | 0xA1 | 0xB1 => {
-                    self.lda(&opcode.mode);
-                }
-                0x85 | 0x95 | 0x8D | 0x9D | 0x99 | 0x81 | 0x91 => {
-                    self.sta(&opcode.mode);
-                }
-                0xAA => self.tax(),
-                0xE8 => self.inx(),
-                // CLD
-                0xD8 => self.status.remove(CpuFlags::DECIMAL_MODE),
-                // CLI
-                0x58 => self.status.remove(CpuFlags::INTERRUPT_DISABLE),
-                // CLV
-                0xB8 => self.status.remove(CpuFlags::OVERFLOW),
-                // CLC
-                0x18 => self.status.remove(CpuFlags::CARRY),
-                // SEC
-                0x38 => self.status.insert(CpuFlags::CARRY),
-                // SEI
-                0x78 => self.status.insert(CpuFlags::INTERRUPT_DISABLE),
-                // SED
-                0xF8 => self.status.insert(CpuFlags::DECIMAL_MODE),
-                // PHA
-                0x48 => self.stack_push(self.register_a),
-                // PLA
-                0x68 => self.pla(),
-                // PHP
-                0x08 => self.php(),
-                // PLP
-                0x28 => self.plp(),
-                0x00 => break,
-                _ => todo!(),
-            }
-
-            if program_counter_state == self.program_counter {
-                self.program_counter += (opcode.len - 1) as u16;
-            }
-        }
-    }
-
     fn plp(&mut self) {
         let value = self.stack_pop();
         self.status = CpuFlags::from_bits_truncate(value);
@@ -253,6 +202,125 @@ impl CPU {
     fn pla(&mut self) {
         let value = self.stack_pop();
         self.set_register_a(value);
+    }
+
+    fn add_to_register_a(&mut self, data: u8) {
+        let sum = self.register_a as u16
+            + data as u16
+            + (if self.status.contains(CpuFlags::CARRY) {
+                1
+            } else {
+                0
+            }) as u16;
+
+        let carry = sum > 0xff;
+
+        if carry {
+            self.status.insert(CpuFlags::CARRY);
+        } else {
+            self.status.remove(CpuFlags::CARRY);
+        }
+
+        let result = sum as u8;
+
+        if (data ^ result) & (result ^ self.register_a) & 0x80 != 0 {
+            self.status.insert(CpuFlags::OVERFLOW);
+        } else {
+            self.status.remove(CpuFlags::OVERFLOW)
+        }
+
+        self.set_register_a(result);
+    }
+
+    fn adc(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let value = self.mem_read(addr);
+        self.add_to_register_a(value);
+    }
+
+    fn sbc(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(&mode);
+        let data = self.mem_read(addr);
+        self.add_to_register_a(((data as i8).wrapping_neg().wrapping_sub(1)) as u8);
+    }
+
+    fn and(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let value = self.mem_read(addr);
+        self.set_register_a(self.register_a & value);
+    }
+
+    fn eor(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let value = self.mem_read(addr);
+        self.set_register_a(self.register_a ^ value);
+    }
+
+    pub fn run(&mut self) {
+        let ref opcodes: HashMap<u8, &'static opcodes::OpCode> = *opcodes::OPCODES_MAP;
+
+        loop {
+            let code = self.mem_read(self.program_counter);
+            let opcode = opcodes
+                .get(&code)
+                .expect(&format!("OpCode {:x} is not recognized", code));
+            self.program_counter += 1;
+            let program_counter_state = self.program_counter;
+            match code {
+                0xA9 | 0xA5 | 0xB5 | 0xAD | 0xBD | 0xB9 | 0xA1 | 0xB1 => {
+                    self.lda(&opcode.mode);
+                }
+                0x85 | 0x95 | 0x8D | 0x9D | 0x99 | 0x81 | 0x91 => {
+                    self.sta(&opcode.mode);
+                }
+                0xAA => self.tax(),
+                0xE8 => self.inx(),
+                // CLD
+                0xD8 => self.status.remove(CpuFlags::DECIMAL_MODE),
+                // CLI
+                0x58 => self.status.remove(CpuFlags::INTERRUPT_DISABLE),
+                // CLV
+                0xB8 => self.status.remove(CpuFlags::OVERFLOW),
+                // CLC
+                0x18 => self.status.remove(CpuFlags::CARRY),
+                // SEC
+                0x38 => self.status.insert(CpuFlags::CARRY),
+                // SEI
+                0x78 => self.status.insert(CpuFlags::INTERRUPT_DISABLE),
+                // SED
+                0xF8 => self.status.insert(CpuFlags::DECIMAL_MODE),
+                // PHA
+                0x48 => self.stack_push(self.register_a),
+                // PLA
+                0x68 => self.pla(),
+                // PHP
+                0x08 => self.php(),
+                // PLP
+                0x28 => self.plp(),
+                // ADC
+                0x69 | 0x65 | 0x75 | 0x6D | 0x7D | 0x79 | 0x61 | 0x71 => {
+                    self.adc(&opcode.mode);
+                }
+                // SBC
+                0xE9 | 0xE5 | 0xF5 | 0xED | 0xFD | 0xF9 | 0xE1 | 0xF1 => {
+                    self.sbc(&opcode.mode);
+                }
+                // AND
+                0x29 | 0x25 | 0x35 | 0x2D | 0x3D | 0x39 | 0x21 | 0x31 => {
+                    self.and(&opcode.mode);
+                }
+                // EOR
+                0x49 | 0x45 | 0x55 | 0x4D | 0x5D | 0x59 | 0x41 | 0x51 => {
+                    self.eor(&opcode.mode);
+                }
+                0x00 => break,
+                _ => todo!(),
+            }
+
+            if program_counter_state == self.program_counter {
+                self.program_counter += (opcode.len - 1) as u16;
+            }
+        }
     }
 }
 
