@@ -1,9 +1,10 @@
-use std::collections::HashMap;
 use bitflags::bitflags;
+use std::collections::HashMap;
 
 use crate::opcodes;
 
 bitflags! {
+    #[derive(Clone)]
     pub struct CpuFlags: u8 {
         const CARRY             = 0b00000001;
         const ZERO              = 0b00000010;
@@ -20,6 +21,7 @@ pub struct CPU {
     pub register_a: u8,
     pub register_x: u8,
     pub register_y: u8,
+    pub stack_pointer: u8,
     pub status: CpuFlags,
     pub program_counter: u16,
     memory: [u8; 0xFFFF],
@@ -40,12 +42,16 @@ pub enum AddressingMode {
     NoneAddressing,
 }
 
+const STACK: u16 = 0x0100;
+const STACK_RESET: u8 = 0xfd;
+
 impl CPU {
     pub fn new() -> CPU {
         CPU {
             register_a: 0,
             register_x: 0,
             register_y: 0,
+            stack_pointer: STACK_RESET,
             status: CpuFlags::from_bits_truncate(0b00100100),
             program_counter: 0,
             memory: [0; 0xFFFF],
@@ -124,6 +130,14 @@ impl CPU {
                 0x78 => self.status.insert(CpuFlags::INTERRUPT_DISABLE),
                 // SED
                 0xF8 => self.status.insert(CpuFlags::DECIMAL_MODE),
+                // PHA
+                0x48 => self.stack_push(self.register_a),
+                // PLA
+                0x68 => self.pla(),
+                // PHP
+                0x08 => self.php(),
+                // PLP
+                0x28 => self.plp(),
                 0x00 => break,
                 _ => todo!(),
             }
@@ -132,6 +146,35 @@ impl CPU {
                 self.program_counter += (opcode.len - 1) as u16;
             }
         }
+    }
+
+    fn plp(&mut self) {
+        let value = self.stack_pop();
+        self.status = CpuFlags::from_bits_truncate(value);
+        self.status.remove(CpuFlags::BREAK);
+        self.status.insert(CpuFlags::BREAK2);
+    }
+
+    fn php(&mut self) {
+        let mut flags = self.status.clone();
+        flags.insert(CpuFlags::BREAK);
+        flags.insert(CpuFlags::BREAK2);
+        self.stack_push(flags.bits());
+    }
+
+    fn stack_pop(&mut self) -> u8 {
+        self.stack_pointer = self.stack_pointer.wrapping_add(1);
+        self.mem_read((STACK as u16) + self.stack_pointer as u16)
+    }
+
+    fn stack_push(&mut self, value: u8) {
+        self.mem_write(STACK + self.stack_pointer as u16, value);
+        self.stack_pointer = self.stack_pointer.wrapping_sub(1);
+    }
+
+    fn set_register_a(&mut self, value: u8) {
+        self.register_a = value;
+        self.update_zero_and_negative_flags(self.register_a);
     }
 
     fn inx(&mut self) {
@@ -205,6 +248,11 @@ impl CPU {
             }
             AddressingMode::NoneAddressing => 0,
         }
+    }
+
+    fn pla(&mut self) {
+        let value = self.stack_pop();
+        self.set_register_a(value);
     }
 }
 
