@@ -2,8 +2,7 @@ const NES_TAG: [u8; 4] = [0x4E, 0x45, 0x53, 0x1A];
 const PRG_ROM_PAGE_SIZE: usize = 16384;
 const CHR_ROM_PAGE_SIZE: usize = 8192;
 
-#[derive(Debug, PartialEq)]
-#[allow(non_camel_case_types)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Mirroring {
     VERTICAL,
     HORIZONTAL,
@@ -23,12 +22,12 @@ impl Rom {
             return Err("File is not in iNES file format".to_string());
         }
 
+        let mapper = (raw[7] & 0b1111_0000) | (raw[6] >> 4);
+
         let ines_ver = (raw[7] >> 2) & 0b11;
         if ines_ver != 0 {
             return Err("NES2.0 format is not supported".to_string());
         }
-
-        let mapper = (raw[6] >> 4) | (raw[7] & 0b1111_0000);
 
         let four_screen = raw[6] & 0b1000 != 0;
         let vertical_mirroring = raw[6] & 0b1 != 0;
@@ -56,8 +55,8 @@ impl Rom {
 }
 
 pub mod test {
-    use super::*;
 
+    use super::*;
 
     struct TestRom {
         header: Vec<u8>,
@@ -80,10 +79,15 @@ pub mod test {
         }
         result.extend(&rom.pgp_rom);
         result.extend(&rom.chr_rom);
+
         result
     }
 
-    pub fn new_test_rom(program: Vec<u8>) -> Rom {
+    pub fn test_rom() -> Rom {
+        test_rom_containing(vec![])
+    }
+
+    pub fn test_rom_containing(program: Vec<u8>) -> Rom {
         let mut pgp_rom_contents = program;
         pgp_rom_contents.resize(2 * PRG_ROM_PAGE_SIZE, 0);
 
@@ -95,6 +99,7 @@ pub mod test {
             pgp_rom: pgp_rom_contents,
             chr_rom: vec![2; 1 * CHR_ROM_PAGE_SIZE],
         });
+
         Rom::new(&test_rom).unwrap()
     }
 
@@ -151,4 +156,20 @@ pub mod test {
         assert_eq!(rom.screen_mirroring, Mirroring::VERTICAL);
     }
 
+    #[test]
+    fn test_nes2_is_not_supported() {
+        let test_rom = create_rom(TestRom {
+            header: vec![
+                0x4E, 0x45, 0x53, 0x1A, 0x01, 0x01, 0x31, 0x8, 00, 00, 00, 00, 00, 00, 00, 00,
+            ],
+            trainer: None,
+            pgp_rom: vec![1; 1 * PRG_ROM_PAGE_SIZE],
+            chr_rom: vec![2; 1 * CHR_ROM_PAGE_SIZE],
+        });
+        let rom = Rom::new(&test_rom);
+        match rom {
+            Result::Ok(_) => assert!(false, "should not load rom"),
+            Result::Err(str) => assert_eq!(str, "NES2.0 format is not supported"),
+        }
+    }
 }

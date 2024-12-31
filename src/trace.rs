@@ -4,8 +4,15 @@ use crate::cpu::CPU;
 use crate::opcodes;
 use std::collections::HashMap;
 
-pub fn trace(cpu: &CPU) -> String {
+lazy_static! {
+    pub static ref NON_READABLE_ADDR: Vec<u16> =
+        vec!(0x2001, 0x2002, 0x2003, 0x2004, 0x2005, 0x2006, 0x2007, 0x4016, 0x4017);
+}
+
+pub fn trace(cpu: &mut CPU) -> String {
     let ref opscodes: HashMap<u8, &'static opcodes::OpCode> = *opcodes::OPCODES_MAP;
+
+    let ref non_readable_addr = *NON_READABLE_ADDR;
 
     let code = cpu.mem_read(cpu.program_counter);
     let ops = opscodes.get(&code).unwrap();
@@ -17,8 +24,13 @@ pub fn trace(cpu: &CPU) -> String {
     let (mem_addr, stored_value) = match ops.mode {
         AddressingMode::Immediate | AddressingMode::NoneAddressing => (0, 0),
         _ => {
-            let addr = cpu.get_absolute_address(&ops.mode, begin + 1);
-            (addr, cpu.mem_read(addr))
+            let (addr, _) = cpu.get_absolute_address(&ops.mode, begin + 1);
+
+            if !non_readable_addr.contains(&addr) {
+                (addr, cpu.mem_read(addr))
+            } else {
+                (addr, 0)
+            }
         }
     };
 
@@ -134,11 +146,11 @@ pub fn trace(cpu: &CPU) -> String {
 mod test {
     use super::*;
     use crate::bus::Bus;
-    use crate::cartridge::test::new_test_rom;
+    use crate::cartridge::test::test_rom;
 
     #[test]
     fn test_format_trace() {
-        let mut bus = Bus::new(new_test_rom(vec![]));
+        let mut bus = Bus::new(test_rom(), |_ppu, _joypad| {});
         bus.mem_write(100, 0xa2);
         bus.mem_write(101, 0x01);
         bus.mem_write(102, 0xca);
@@ -170,7 +182,7 @@ mod test {
 
     #[test]
     fn test_format_mem_access() {
-        let mut bus = Bus::new(new_test_rom(vec![]));
+        let mut bus = Bus::new(test_rom(), |_ppu, _joypad| {});
         // ORA ($33), Y
         bus.mem_write(100, 0x11);
         bus.mem_write(101, 0x33);

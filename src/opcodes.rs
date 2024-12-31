@@ -1,6 +1,5 @@
-use std::collections::HashMap;
-
 use crate::cpu::AddressingMode;
+use std::collections::HashMap;
 
 pub struct OpCode {
     pub code: u8,
@@ -11,13 +10,13 @@ pub struct OpCode {
 }
 
 impl OpCode {
-    pub fn new(code: u8, mnemonic: &'static str, len: u8, cycles: u8, mode: AddressingMode) -> OpCode {
+    fn new(code: u8, mnemonic: &'static str, len: u8, cycles: u8, mode: AddressingMode) -> Self {
         OpCode {
-            code,
-            mnemonic,
-            len,
-            cycles,
-            mode,
+            code: code,
+            mnemonic: mnemonic,
+            len: len,
+            cycles: cycles,
+            mode: mode,
         }
     }
 }
@@ -146,7 +145,7 @@ lazy_static! {
         OpCode::new(0x70, "BVS", 2, 2 /*(+1 if branch succeeds +2 if to a new page)*/, AddressingMode::NoneAddressing),
         OpCode::new(0x50, "BVC", 2, 2 /*(+1 if branch succeeds +2 if to a new page)*/, AddressingMode::NoneAddressing),
         OpCode::new(0x30, "BMI", 2, 2 /*(+1 if branch succeeds +2 if to a new page)*/, AddressingMode::NoneAddressing),
-        OpCode::new(0xF0, "BEQ", 2, 2 /*(+1 if branch succeeds +2 if to a new page)*/, AddressingMode::NoneAddressing),
+        OpCode::new(0xf0, "BEQ", 2, 2 /*(+1 if branch succeeds +2 if to a new page)*/, AddressingMode::NoneAddressing),
         OpCode::new(0xb0, "BCS", 2, 2 /*(+1 if branch succeeds +2 if to a new page)*/, AddressingMode::NoneAddressing),
         OpCode::new(0x90, "BCC", 2, 2 /*(+1 if branch succeeds +2 if to a new page)*/, AddressingMode::NoneAddressing),
         OpCode::new(0x10, "BPL", 2, 2 /*(+1 if branch succeeds +2 if to a new page)*/, AddressingMode::NoneAddressing),
@@ -220,6 +219,7 @@ lazy_static! {
 
 
         /* unofficial */
+
         OpCode::new(0xc7, "*DCP", 2, 5, AddressingMode::ZeroPage),
         OpCode::new(0xd7, "*DCP", 2, 6, AddressingMode::ZeroPage_X),
         OpCode::new(0xCF, "*DCP", 3, 6, AddressingMode::Absolute),
@@ -351,7 +351,6 @@ lazy_static! {
         OpCode::new(0x83, "*SAX", 2, 6, AddressingMode::Indirect_X),
 
     ];
-
 
 
     pub static ref OPCODES_MAP: HashMap<u8, &'static OpCode> = {
